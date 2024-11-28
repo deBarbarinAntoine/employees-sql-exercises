@@ -27,6 +27,10 @@ FROM titles t
          JOIN employees e on t.emp_no = e.emp_no
 GROUP BY t.title;
 
+-- correction:
+SELECT DISTINCT title
+FROM titles;
+
 #     6. Combien y a t'il de département ? ( nombreDep ) ?
 SELECT COUNT(*) nombreDep
 FROM departments;
@@ -36,6 +40,10 @@ SELECT emp_no, salary maxSalary
 FROM salaries
 ORDER BY salary DESC
 LIMIT 1;
+
+-- correction:
+SELECT emp_no, max(salary) maxSalary
+FROM salaries;
 
 #     8. Quel est salaire moyen de l'employé numéro 287323 toute période confondue ? (emp_no, salaireMoy) ?
 SELECT emp_no, AVG(salary) salaireMoy
@@ -66,7 +74,7 @@ WHERE de.emp_no = '287323';
 SELECT *
 FROM employees
 WHERE hire_date BETWEEN DATE('2000-01-01') AND DATE('2000-01-31')
-ORDER BY hire_date ASC;
+ORDER BY hire_date;
 
 #     14. Quelle est la somme cumulée des salaires de toute la société (sommeSalaireTotale) ?
 SELECT SUM(salary) sommeSalaireTotale
@@ -83,7 +91,7 @@ WHERE e.first_name = 'Danny' AND e.last_name = 'Rando'
   AND DATE ('1990-01-12') BETWEEN t.from_date AND t.to_date;
 
 #     16. Combien d'employés travaillaient dans le département 'Sales' le 1er Janvier 2000 (nbEmp) ?
-SELECT COUNT(DISTINCT de.emp_no) nbEmp
+SELECT COUNT(*) nbEmp
 FROM departments d
          JOIN employees.dept_emp de on d.dept_no = de.dept_no
 WHERE DATE('2000-01-01') BETWEEN de.from_date AND de.to_date
@@ -111,8 +119,7 @@ ORDER BY first_name DESC,
 SELECT last_name, COUNT(*) nombre
 FROM employees
 GROUP BY last_name HAVING COUNT(*) > 200
-ORDER BY nombre ASC,
-         last_name ASC;
+ORDER BY nombre, last_name;
 
 #     20. Qui sont les employés dont le prénom est Richard qui ont gagné en somme cumulée plus de 1 000 000 (emp_no, first_name, last_name, hire_date, sommeSalaire) ?
 SELECT e.emp_no, first_name, last_name, hire_date, SUM(s.salary) sommeSalaire
@@ -122,9 +129,9 @@ WHERE first_name = 'Richard'
 GROUP BY e.emp_no HAVING sommeSalaire > 1000000;
 
 #     21. Quel est le numéro, nom, prénom de l'employé qui a eu le salaire maximum de tous les temps, et quel est le montant de ce salaire ? (emp_no, first_name, last_name, title, maxSalary)
-SELECT e.emp_no, e.first_name, e.last_name, MAX(s.salary) maxSalary
-FROM salaries s
-    JOIN employees e on e.emp_no = s.emp_no;
+SELECT e.emp_no, first_name, last_name,  salary AS maxSalary
+FROM salaries s JOIN employees e ON e.emp_no = s.emp_no
+WHERE salary = (SELECT max(salary) FROM salaries );
 
 #     22. bonus. Qui est le manager de Martine Hambrick actuellement et quel est son titre (emp_no, first_name, last_name, title)
 SELECT em.emp_no, em.first_name, em.last_name, t.title
@@ -145,8 +152,9 @@ SELECT t.title, AVG(s.salary) salaireMoyen
 FROM titles t
          JOIN employees e on t.emp_no = e.emp_no
          JOIN salaries s on e.emp_no = s.emp_no
+WHERE now() BETWEEN t.from_date AND t.to_date AND now() BETWEEN s.from_date AND s.to_date
 GROUP BY t.title
-ORDER BY salaireMoyen ASC;
+ORDER BY salaireMoyen;
 
 #     24. Combien de manager différents ont eu les différents départements (dept_no, dept_name, nbManagers), Classé par nom de département
 SELECT d.dept_no, d.dept_name, COUNT(dm.emp_no) nbManagers
@@ -156,13 +164,29 @@ GROUP BY d.dept_no, d.dept_name
 ORDER BY d.dept_name;
 
 #     25. Quel est le département de la société qui a le salaire moyen le plus élevé (dept_no, dept_name, salaireMoyen)
-SELECT d.dept_no, d.dept_name, AVG(s.salary) salaireMoyen
-FROM departments d
-         JOIN dept_emp de on d.dept_no = de.dept_no
-         JOIN salaries s on de.emp_no = s.emp_no
+SELECT d.dept_no, d.dept_name, AVG(salary) AS salaireMoyen
+FROM departments d INNER JOIN dept_emp de ON de.dept_no = d.dept_no INNER JOIN employees e ON e.emp_no = de.emp_no INNER JOIN salaries s ON s.emp_no = e.emp_no
+WHERE CURRENT_DATE BETWEEN de.from_date AND de.to_date
 GROUP BY d.dept_no, d.dept_name
-ORDER BY salaireMoyen DESC
-LIMIT 1;
+HAVING AVG(salary) = (SELECT max(salaireMoyen)
+                      FROM (
+                               SELECT d.dept_no, d.dept_name, AVG(salary) AS salaireMoyen
+                               FROM departments d INNER JOIN dept_emp de ON de.dept_no = d.dept_no INNER JOIN employees e ON e.emp_no = de.emp_no INNER JOIN salaries s ON s.emp_no = e.emp_no
+                               WHERE CURRENT_DATE BETWEEN de.from_date AND de.to_date
+                               GROUP BY d.dept_no, d.dept_name
+                           ) AS salMoy
+);
+WITH salMoy as (
+    SELECT d.dept_no, d.dept_name, AVG(salary) AS salaireMoyen
+    FROM departments d INNER JOIN dept_emp de ON de.dept_no = d.dept_no INNER JOIN employees e ON e.emp_no = de.emp_no INNER JOIN salaries s ON s.emp_no = e.emp_no
+    WHERE CURRENT_DATE BETWEEN de.from_date AND de.to_date
+    GROUP BY d.dept_no, d.dept_name
+)
+SELECT d.dept_no, d.dept_name, salaireMoyen
+from salMoy d
+where salaireMoyen = (SELECT max(salaireMoyen)
+                      FROM salMoy
+);
 
 #     26. Quels sont les employés qui ont eu le titre de 'Senior Staff' sans avoir le titre de 'Staff' ( emp_no , birth_date , first_name , last_name , gender , hire_date )
 SELECT e.emp_no, e.birth_date, e.first_name, e.last_name, e.gender, e.hire_date
@@ -174,6 +198,8 @@ FROM employees e
     WHERE t2.title = 'Staff') et2 on e.emp_no = et2.emp_no
 WHERE t.title = 'Senior Staff'
   AND et2.emp_no IS NULL;
+
+--
 
 #     27. Indiquer le titre et le salaire de chaque employé lors de leur embauche (emp_no, first_name, last_name, title, salary)
 SELECT e.emp_no, e.first_name, e.last_name, t.title, s.salary
@@ -189,6 +215,14 @@ FROM employees e
     GROUP BY emp_no) s1 ON e.emp_no = s1.emp_no
          JOIN salaries s ON s1.emp_no = s.emp_no AND s1.first_salary = s.from_date;
 
+-- correction
+SELECT e.emp_no,  first_name, last_name, title, salary, t.from_date, s.from_date, hire_date
+FROM employees e
+         INNER JOIN  salaries s ON e.emp_no = s.emp_no
+         INNER JOIN titles t ON t.emp_no = e.emp_no
+WHERE s.from_date <= ALL (SELECT from_date FROM salaries s2 WHERE s2.emp_no = s.emp_no)
+  AND t.from_date = s.from_date;
+
 #     28. Quels sont les employés dont le salaire a baissé (emp_no, first_name, last_name)
 SELECT e.emp_no, e.first_name, e.last_name
 FROM employees e
@@ -203,3 +237,8 @@ FROM employees e
     GROUP BY emp_no) s2 ON e.emp_no = s2.emp_no
          JOIN salaries ls ON s2.emp_no = ls.emp_no AND s2.last_salary = ls.from_date
 WHERE fs.salary > ls.salary;
+
+-- correction
+SELECT e.emp_no, first_name, last_name
+FROM employees e JOIN salaries s ON e.emp_no = s.emp_no
+WHERE EXISTS (SELECT * FROM salaries s2 WHERE s.emp_no = s2.emp_no AND s2.from_date > s.from_date and s2.salary < s.salary );
